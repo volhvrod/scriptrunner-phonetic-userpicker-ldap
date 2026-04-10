@@ -1,4 +1,3 @@
-```groovy
 import com.atlassian.jira.user.ApplicationUser
 import com.onresolve.scriptrunner.canned.jira.fields.model.PickerOption
 import com.onresolve.scriptrunner.ldap.LdapUtil
@@ -99,4 +98,3 @@ renderItemViewHtml = { Map<String, Object> item ->
 }
 
 renderItemTextOnlyValue = renderItemViewHtml
-```

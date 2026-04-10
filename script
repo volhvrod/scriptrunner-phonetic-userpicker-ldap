@@ -1,0 +1,102 @@
+```groovy
+import com.atlassian.jira.user.ApplicationUser
+import com.onresolve.scriptrunner.canned.jira.fields.model.PickerOption
+import com.onresolve.scriptrunner.ldap.LdapUtil
+import com.adaptavist.hapi.jira.users.Users
+import org.springframework.ldap.core.AttributesMapper
+import javax.naming.directory.Attributes
+import javax.naming.directory.SearchControls
+
+// ===================== Settings =====================
+def ldapPoolName = 'YOUR_LDAP_POOL'
+def groupDN = 'OU=ou,DC=domain,DC=net'
+// =====================================================
+
+// Supported function for phonetic name
+def fetchPhonetic = { String lookupValue ->
+    LdapUtil.withTemplate(ldapPoolName) { template ->
+        def results = template.search(
+            "",
+            "(|(userPrincipalName=${lookupValue})(sAMAccountName=${lookupValue}))",
+            SearchControls.SUBTREE_SCOPE,
+            { Attributes attrs -> attrs.get('msDS-PhoneticDisplayName')?.get() } as AttributesMapper<String>
+        )
+        results ? results[0] : null
+    }
+}
+
+// ===================== SEARCH =====================
+search = { String inputValue ->
+    if (!inputValue || inputValue.trim().length() < 2) return []
+
+    def cleanInput = inputValue.trim()
+    def filter = "(&(objectCategory=person)(objectClass=user)(memberOf=${groupDN})(msDS-PhoneticDisplayName=*${cleanInput}*))"
+
+    def ldapResults = LdapUtil.withTemplate(ldapPoolName) { template ->
+        template.search(
+            "",
+            filter,
+            SearchControls.SUBTREE_SCOPE,
+            { Attributes attrs ->
+                [
+                    upn     : attrs.get('userPrincipalName')?.get(),
+                    phonetic: attrs.get('msDS-PhoneticDisplayName')?.get()
+                ]
+            } as AttributesMapper<Map<String, Object>>
+        )
+    }
+
+    def options = []
+    ldapResults.each { Map<String, Object> entry ->
+        if (entry.upn) {
+            def jiraUser = Users.getByName(entry.upn as String)
+            if (jiraUser) {
+                options << [
+                    user    : jiraUser,
+                    phonetic: entry.phonetic
+                ]
+            }
+        }
+    }
+    return options
+}
+
+// ===================== TO OPTION =====================
+toOption = { Map<String, Object> item, Closure<String> highlight ->
+    def user = item.user as ApplicationUser
+    def phonetic = item.phonetic as String
+
+    def displayName = phonetic ?: user.displayName
+
+    new PickerOption(
+        value: user.getName(),
+        label: displayName,
+        html : highlight(displayName, false)
+    )
+}
+
+// ===================== GET ITEM FROM ID =====================
+getItemFromId = { String id ->
+    def jiraUser = Users.getByName(id)
+    if (!jiraUser) return null
+
+    def phonetic = fetchPhonetic(id)
+
+    [
+        user    : jiraUser,
+        phonetic: phonetic
+    ]
+}
+
+// ===================== RENDER IN ISSUE =====================
+renderItemViewHtml = { Map<String, Object> item ->
+    if (!item) return ''
+
+    def user = item.user as ApplicationUser
+    def phonetic = item.phonetic as String
+
+    return phonetic ?: user.displayName
+}
+
+renderItemTextOnlyValue = renderItemViewHtml
+```

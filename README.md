@@ -35,6 +35,7 @@ Perfect for helpdesk, HR, project management, or any team that needs a clean, fa
 | **LDAP Connection**         | Pre-configured ScriptRunner LDAP pool |
 | **Active Directory**        | You can change `msDS-PhoneticDisplayName` to your localname atrr |
 | **Permissions**             | ScriptRunner must be able to query the LDAP pool and read Jira users |
+| **Search CustomfField Teamplate**             | Disable Custom Field Search Template - None |
 
 ---
 

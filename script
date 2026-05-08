@@ -20,7 +20,7 @@ def isIndexing() {
 
 // Helper function with indexation protection
 def fetchPhonetic = { String lookupValue ->
-    if (isIndexing()) return null // НЕ лезем в LDAP при индексации
+    if (isIndexing()) return null // DO NOT go into LDAP when indexing
     
     try {
         LdapUtil.withTemplate(ldapPoolName) { template ->

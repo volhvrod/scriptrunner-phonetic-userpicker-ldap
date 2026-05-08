@@ -8,17 +8,17 @@ import javax.naming.directory.Attributes
 import javax.naming.directory.SearchControls
 import com.atlassian.jira.util.index.IndexLifecycleManager
 
-// ===================== НАСТРОЙКИ =====================
-def ldapPoolName = 'HD-14022'
-def groupDN = 'CN=HD-14022,OU=G,OU=SamSol,OU=Belcaf,DC=sam-solutions,DC=net'
+// ===================== Settings =====================
+def ldapPoolName = 'Your_LDAP_Pool'                        // ← Name of your ScriptRunner LDAP connection pool
+def groupDN = 'OU=ou,DC=domain,DC=net'                     // ← Full Distinguished Name of the target group
 // =====================================================
 
-// Функция проверки индексации
+// Check indexing
 def isIndexing() {
     return !ComponentAccessor.getComponent(IndexLifecycleManager).isIndexAvailable()
 }
 
-// Вспомогательная функция с защитой от индексации
+// Helper function with indexation protection
 def fetchPhonetic = { String lookupValue ->
     if (isIndexing()) return null // НЕ лезем в LDAP при индексации
     
@@ -89,7 +89,7 @@ getItemFromId = { String id ->
     def jiraUser = Users.getByName(id)
     if (!jiraUser) return null
 
-    // Теперь безопасно для индексатора:
+    // Now safe for the indexer:
     def phonetic = fetchPhonetic(id)
 
     [

@@ -1,3 +1,4 @@
+import com.atlassian.jira.component.ComponentAccessor
 import com.atlassian.jira.user.ApplicationUser
 import com.onresolve.scriptrunner.canned.jira.fields.model.PickerOption
 import com.onresolve.scriptrunner.ldap.LdapUtil
@@ -5,22 +6,35 @@ import com.adaptavist.hapi.jira.users.Users
 import org.springframework.ldap.core.AttributesMapper
 import javax.naming.directory.Attributes
 import javax.naming.directory.SearchControls
+import com.atlassian.jira.util.index.IndexLifecycleManager
 
-// ===================== Settings =====================
-def ldapPoolName = 'YOUR_LDAP_POOL'
-def groupDN = 'OU=ou,DC=domain,DC=net'
+// ===================== НАСТРОЙКИ =====================
+def ldapPoolName = 'HD-14022'
+def groupDN = 'CN=HD-14022,OU=G,OU=SamSol,OU=Belcaf,DC=sam-solutions,DC=net'
 // =====================================================
 
-// Supported function for phonetic name
+// Функция проверки индексации
+def isIndexing() {
+    return !ComponentAccessor.getComponent(IndexLifecycleManager).isIndexAvailable()
+}
+
+// Вспомогательная функция с защитой от индексации
 def fetchPhonetic = { String lookupValue ->
-    LdapUtil.withTemplate(ldapPoolName) { template ->
-        def results = template.search(
-            "",
-            "(|(userPrincipalName=${lookupValue})(sAMAccountName=${lookupValue}))",
-            SearchControls.SUBTREE_SCOPE,
-            { Attributes attrs -> attrs.get('msDS-PhoneticDisplayName')?.get() } as AttributesMapper<String>
-        )
-        results ? results[0] : null
+    if (isIndexing()) return null // НЕ лезем в LDAP при индексации
+    
+    try {
+        LdapUtil.withTemplate(ldapPoolName) { template ->
+            def results = template.search(
+                "",
+                "(|(userPrincipalName=${lookupValue})(sAMAccountName=${lookupValue}))",
+                SearchControls.SUBTREE_SCOPE,
+                { Attributes attrs -> attrs.get('msDS-PhoneticDisplayName')?.get() } as AttributesMapper<String>
+            )
+            results ? results[0] : null
+        }
+    } catch (Exception e) {
+        log.error("LDAP error for ${lookupValue}: ${e.message}")
+        return null
     }
 }
 
@@ -38,8 +52,8 @@ search = { String inputValue ->
             SearchControls.SUBTREE_SCOPE,
             { Attributes attrs ->
                 [
-                    upn     : attrs.get('userPrincipalName')?.get(),
-                    phonetic: attrs.get('msDS-PhoneticDisplayName')?.get()
+                    upn      : attrs.get('userPrincipalName')?.get(),
+                    phonetic : attrs.get('msDS-PhoneticDisplayName')?.get()
                 ]
             } as AttributesMapper<Map<String, Object>>
         )
@@ -50,10 +64,7 @@ search = { String inputValue ->
         if (entry.upn) {
             def jiraUser = Users.getByName(entry.upn as String)
             if (jiraUser) {
-                options << [
-                    user    : jiraUser,
-                    phonetic: entry.phonetic
-                ]
+                options << [ user: jiraUser, phonetic: entry.phonetic ]
             }
         }
     }
@@ -64,7 +75,6 @@ search = { String inputValue ->
 toOption = { Map<String, Object> item, Closure<String> highlight ->
     def user = item.user as ApplicationUser
     def phonetic = item.phonetic as String
-
     def displayName = phonetic ?: user.displayName
 
     new PickerOption(
@@ -79,6 +89,7 @@ getItemFromId = { String id ->
     def jiraUser = Users.getByName(id)
     if (!jiraUser) return null
 
+    // Теперь безопасно для индексатора:
     def phonetic = fetchPhonetic(id)
 
     [
@@ -90,10 +101,8 @@ getItemFromId = { String id ->
 // ===================== RENDER IN ISSUE =====================
 renderItemViewHtml = { Map<String, Object> item ->
     if (!item) return ''
-
     def user = item.user as ApplicationUser
     def phonetic = item.phonetic as String
-
     return phonetic ?: user.displayName
 }
 
